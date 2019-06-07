@@ -1,0 +1,78 @@
+plugins {
+    id 'java'
+    //id 'idea'
+}
+
+group 'org.iota'
+version '0.1-SNAPSHOT'
+
+sourceCompatibility = 1.8
+
+repositories {
+    mavenCentral()
+    maven { url "https://jitpack.io" }
+}
+
+dependencies {
+    compileOnly ('com.github.iotaledger:ict:3bb009c3fd0088943ab9b810c69a76097f9fb6ae')
+    runtimeClasspath ('com.github.iotaledger:ict:3bb009c3fd0088943ab9b810c69a76097f9fb6ae')
+    testCompileOnly ('com.github.iotaledger:ict:3bb009c3fd0088943ab9b810c69a76097f9fb6ae')
+    compile 'com.github.iotaledger:serialization.ixi:205649a4ef6a8fdd222a93269b13a41225056a1c'
+    compile 'com.github.iotaledger:graph.ixi:4d27dde6faeda0e72fc6e8d68cd9383b6c909e1c'
+    compile "com.beust:jcommander:1.72"
+    compile 'org.json:json:20171018'
+    testCompile group: 'junit', name: 'junit', version: '4.12'
+    /*
+    testCompile 'io.cucumber:cucumber-java8:4.2.6'
+    testCompile 'io.cucumber:cucumber-junit:4.2.6'
+    testImplementation 'io.cucumber:cucumber-junit:4.2.6'
+     */
+}
+
+/*
+jar {
+    manifest {
+        attributes 'Extension-Name'    : 'Qubic'
+        attributes 'Extension-Prefix'  : 'org.iota.qubic'
+        attributes 'Attach-Entity'     : ['']
+    }
+}
+*/
+jar {
+
+    manifest {
+        attributes 'Implementation-Title': 'Gradle Jar File Example',
+                'Implementation-Version': version,
+                'Main-Class': 'org.iota.qubic.Qubic',
+                'Extension-Name'    : 'Qubic',
+                'Extension-Prefix'  : 'org.iota.qubic',
+                'Attach-Entity'     : [{Qubic}]
+    }
+}
+
+task fatJar(type: Jar) {
+    manifest.from jar.manifest
+    destinationDir = file("$rootDir/../qqq/src/test/resources/")
+    baseName = project.name + '-all'
+    from { configurations.compile.collect { it.isDirectory() ? it : zipTree(it) } }
+    with jar
+}
+
+/*
+configurations {
+    cucumberRuntime {
+        extendsFrom testImplementation
+    }
+}
+
+task cucumber() {
+    dependsOn assemble, compileTestJava
+    doLast {
+        javaexec {
+            main = "cucumber.api.cli.Main"
+            classpath = configurations.cucumberRuntime + sourceSets.main.output + sourceSets.test.output
+            args = ['--plugin', 'pretty', '--glue', 'gradle.cucumber', 'src/test/resources']
+        }
+    }
+}
+ */
