@@ -3,6 +3,7 @@ package org.iota.qubic;
 import org.iota.ict.utils.Trytes;
 import org.iota.model.Hash;
 import org.iota.qcm.Qxi;
+import org.iota.qubic.tangle.TangleProvider;
 import org.iota.qubic.util.Curl;
 import org.omg.CORBA.UNKNOWN;
 import sun.reflect.generics.reflectiveObjects.NotImplementedException;
@@ -11,10 +12,14 @@ import java.util.*;
 import java.util.function.Function;
 
 public class Qubic extends Qxi {
-    static final String commitEnv = "QUBIC9COMMIT";
-
+    private TangleProvider tangle;
+    Set<Committee> joinedCommittees = new HashSet<>();
     Set<Committee> committees = new HashSet<>();
     Map<String, QTx> qTxMap = new HashMap<>();
+
+    public void join(Committee committee) {
+      joinedCommittees.add(committee);
+    }
 
     public void qubicTxArrived(byte[] qTx) {
         QTx tx = new QTx(qTx);
@@ -51,10 +56,6 @@ public class Qubic extends Qxi {
 
     }
 
-    public static interface CommitteeInterface {
-        public void join();
-    }
-
     public static class QTangle {
         private final Set<Hash> tipsSet = new HashSet<>();
         private final Map<Hash, Set<Hash>> commitSet = new HashMap<>();
@@ -79,11 +80,14 @@ public class Qubic extends Qxi {
         QTx rulesId;
         String id;
         long duration, testDuration;
+        long threshold;
         Map<String, Long> oracleWeights;
         Map<String, Function<QTx, Long>> testMap;
         Map<String, Set<Commitment>> commitmentsMap;
         Map<String, Result> resultMap;
         Map<String, Qcm.Environment> commonEnvironments;
+
+        private Set<Result> toReveal;
 
         /* How to identify a committee?
                 1: by the rules tx, hashed to each Epoch
@@ -101,31 +105,20 @@ public class Qubic extends Qxi {
         public void test(int testIndex) {}
         public void testval(String hash) {}
 
-        enum AddTransactionStatus {
-            INVALID_ID,
-            INVALID_VALUE,
-            UNKNOWN_STATUS,
-        }
-
-        public AddTransactionStatus addCommitment(Commitment commitment) {
-            //org.iota.ict.utils.Trytes.toTrits()
-            if (!oracleWeights.containsKey(commitment.id)) {
+        public void addCommitment(Commitment commitment) {
+            /*
+            if (!oracleWeights.containsKey(commitment.oracle.id)) {
                 return AddTransactionStatus.INVALID_ID;
             }
+             */
 
             Result result = resultMap.getOrDefault(commitment.hash, new Result());
 
-            switch (result.validate(commitment)) {
-                case INVALID: return AddTransactionStatus.INVALID_VALUE;
-                case UNKNOWN:
-                    result.unvalidatedCommitments.add(commitment);
-                    return AddTransactionStatus.UNKNOWN_STATUS;
-                case VALID:
-                    result.validCommitments.add(commitment);
-                    break;
-                default: return AddTransactionStatus.UNKNOWN_STATUS;
+            result.commit(commitment);
+            result.update();
+            if (result.enumerate() > threshold && !result.revealed) {
+                toReveal.add(result);
             }
-            return null;
         }
 
         /** processing phase */
@@ -201,8 +194,14 @@ public class Qubic extends Qxi {
         }
     }
 
+    public static class Oracle {
+        String id;
+        long weight;
+    }
+
     public static class Commitment {
-        String id, saltedHash, hash;
+        Oracle oracle;
+        String saltedHash, hash;
     }
 
     public static class Result {
@@ -211,8 +210,19 @@ public class Qubic extends Qxi {
         byte[] value;
         byte[] capacity;
         String hash; // trytes hash
+        boolean revealed;
         Set<Commitment> unvalidatedCommitments;
         Set<Commitment> validCommitments;
+
+        public void hash(byte[] env, byte[] value) {
+            byte[] hash = new byte[Curl.HASH_LENGTH];
+            capacity = new byte[Curl.CAPACITY_LENGTH];
+            Curl curl = new Curl();
+            curl.absorb(env, 0, env.length);
+            curl.absorb(value, 0, value.length);
+            curl.squeeze(hash, 0, hash.length);
+            curl.getInnerState(capacity, 0);
+        }
 
         public byte[] salted(byte[] salt){
             byte[] saltedHash = new byte[Curl.HASH_LENGTH];
@@ -233,16 +243,55 @@ public class Qubic extends Qxi {
             if (capacity == null) {
                 return SaltValidation.UNKNOWN;
             }
-            return commitment.saltedHash.equals(salted(Trytes.toTrits(commitment.id))) ?
-                    SaltValidation.VALID : SaltValidation.INVALID;
+            return commitment.saltedHash.equals(salted(Trytes.toTrits(commitment.oracle.id))) ?
+                SaltValidation.VALID : SaltValidation.INVALID;
         }
 
-        public void setValue(byte[] val, String env) {
+        public void commit(Commitment commitment) {
+          switch (validate(commitment)) {
+              case UNKNOWN:
+                  unvalidatedCommitments.add(commitment);
+                  break;
+              case VALID:
+                  validCommitments.add(commitment);
+                  break;
+              case INVALID:
+                  break;
+          }
+        }
+
+        void update() {
+            for (Commitment commitment: unvalidatedCommitments) {
+                switch (validate(commitment)) {
+                    case VALID:
+                        validCommitments.add(commitment);
+                        break;
+                    case INVALID:
+                        unvalidatedCommitments.remove(commitment);
+                        break;
+                    default: break;
+                }
+            }
+        }
+
+        public long enumerate() {
+            return validCommitments.stream().map(commitment -> commitment.oracle.weight ).reduce(Math::addExact).get();
+        }
+
+        /**
+         * setValue
+         * sets the value of the result (which may have commitments before values)
+         * @param env the environment to which the value is destined
+         * @param val the value of the result
+         * @return an enumeration of all valid votes
+         */
+        public long setValue(byte[] env, byte[] val) {
             environment.id = env;
             value = val;
+            hash(env, value);
+            update();
+            return enumerate();
         }
-
-
     }
 
     public static class Apocalypse {

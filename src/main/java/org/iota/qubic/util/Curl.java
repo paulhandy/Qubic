@@ -3,6 +3,7 @@ package org.iota.qubic.util;
 public class Curl {
     public static final int HASH_LENGTH = 243;
     private static final int STATE_LENGTH = 3 * HASH_LENGTH;
+    public static final int CAPACITY_LENGTH = STATE_LENGTH - HASH_LENGTH;
     private static final byte[] TRUTH_TABLE = new byte[]{1,  0,  -1, 1,  0,  -1, 1,  0,  -1, 1,  0,
             -1, 1,  0,  -1, 1,  0,  -1, 1,  0,  -1, 1,
             0,  -1, 1,  0,  -1, 1,  0,  -1, 1,  0,  -1,

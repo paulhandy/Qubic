@@ -12,7 +12,7 @@ public class Qcm {
         - Decay (me)
      */
     public static class Environment {
-        String id;
+        byte[] id;
         public Environment () {}
         public Environment (String myId) { id = myId;}
     }

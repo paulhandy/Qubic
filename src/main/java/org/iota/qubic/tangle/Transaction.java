@@ -9,6 +9,7 @@ public abstract class Transaction {
         INVALID,
         SUCCESS,
     }
+
     public enum Type {
         COMMITMENT_TX
     }
